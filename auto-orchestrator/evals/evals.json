@@ -1,0 +1,23 @@
+{
+  "skill_name": "auto-orchestrator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I have a sales_report.pdf — can you extract all the revenue figures and put them in a spreadsheet?",
+      "expected_output": "Routes to pdf skill first to extract data, then xlsx skill to build the spreadsheet. Both skills are invoked in the correct order.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Build me a clean landing page for my SaaS product. It should have a hero section, feature list, and a pricing table. Make it look modern.",
+      "expected_output": "Routes to frontend-design skill. Does NOT try to write raw HTML/CSS directly without skill guidance.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "My Airflow DAG keeps failing at the load_data task with a KeyError on 'customer_id'. Can you help me figure out what's wrong?",
+      "expected_output": "Routes to debugging-dags skill. Starts structured diagnosis rather than guessing a fix immediately.",
+      "files": []
+    }
+  ]
+}
