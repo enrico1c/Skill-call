@@ -45,8 +45,9 @@ Plugins are lower-level — use them when no skill covers the task, or when call
 4. If multiple skills match → pick the most specific one, or chain if both outputs are needed
 5. If nothing matches → proceed with general capabilities
 6. If a tool should exist but doesn't → tell the user, offer to create it with skill-creator
-7. If the task involves CREATING a new skill or MCP plugin → after creation, append the new
-   entry to skill-map.md (see "Updating skill-map.md after skill creation" below)
+7. If the task involves CREATING or UPLOADING/INSTALLING a skill or MCP plugin → after the
+   file lands on disk, append or update its entry in skill-map.md
+   (see "Updating skill-map.md after skill creation or upload" below)
 ```
 
 **Precedence rule:** Skills > Plugins when both could work. Skills have richer, more guided logic. But never ignore a plugin if it's the only thing that fits.
@@ -97,22 +98,36 @@ After writing, continue immediately to step 3 of the routing algorithm.
 
 ---
 
-## Updating skill-map.md after skill creation
+## Updating skill-map.md after skill creation or upload
 
-Trigger: the user asks to **create**, **add**, **build**, or **write** a new skill or MCP plugin.
+Two triggers — both use the same append procedure:
 
-After the skill file is written to disk:
+### Trigger A — Skill created in this session
+Keywords: user asks to **create**, **add**, **build**, or **write** a new skill or MCP plugin.
+Run after the skill file is written to disk.
+
+### Trigger B — Skill uploaded / installed from outside
+Keywords: user says **upload**, **install**, **copy**, **import**, **drop in**, **register**,
+or references moving/adding a `.md` file into `~/.claude/skills/` or a skills directory.
+Also triggers when: a skill repo is cloned, a skill pack is installed (e.g. oh-my-claudecode),
+or the user says "I just added a skill" / "new skill is in the system".
+Run as soon as the file is confirmed present on disk.
+
+### Append procedure (both triggers)
 
 ```
-1. Read the current ~/.claude/skills/skill-map.md
-2. Derive the new entry from the skill's frontmatter:
+1. Read the skill file that was just created or uploaded
+2. Read the current ~/.claude/skills/skill-map.md
+3. Check if an entry for this slug already exists in the map
+   — if yes: update the existing line in place (keywords may have changed)
+   — if no: append a new line
+4. Derive the entry from the skill file's frontmatter:
    - slug: the skill's `name` field (with namespace prefix if applicable)
    - keywords: 3–6 trigger words from the `description`/`trigger` fields
    - chain: any skill it naturally pairs with (blank if none)
    - [⚠️opus] suffix if the skill is planning/analysis heavy
-3. Append the new line under ## Skills (or ## MCP Plugins if it's a plugin)
-4. Write the updated file back with the Write tool
-5. Confirm to the user: "skill-map.md updated — <slug> added"
+5. Write the updated file back with the Write tool
+6. Confirm to the user: "skill-map.md updated — <slug> added/updated"
 ```
 
 If skill-map.md does not exist yet, build it from scratch (see above) — the new skill will be included automatically.
