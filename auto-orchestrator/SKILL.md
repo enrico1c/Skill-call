@@ -45,6 +45,8 @@ Plugins are lower-level — use them when no skill covers the task, or when call
 4. If multiple skills match → pick the most specific one, or chain if both outputs are needed
 5. If nothing matches → proceed with general capabilities
 6. If a tool should exist but doesn't → tell the user, offer to create it with skill-creator
+7. If the task involves CREATING a new skill or MCP plugin → after creation, append the new
+   entry to skill-map.md (see "Updating skill-map.md after skill creation" below)
 ```
 
 **Precedence rule:** Skills > Plugins when both could work. Skills have richer, more guided logic. But never ignore a plugin if it's the only thing that fits.
@@ -92,6 +94,28 @@ mcp__plugin_context7_context7 | library docs api examples | →claude-api
 ```
 
 After writing, continue immediately to step 3 of the routing algorithm.
+
+---
+
+## Updating skill-map.md after skill creation
+
+Trigger: the user asks to **create**, **add**, **build**, or **write** a new skill or MCP plugin.
+
+After the skill file is written to disk:
+
+```
+1. Read the current ~/.claude/skills/skill-map.md
+2. Derive the new entry from the skill's frontmatter:
+   - slug: the skill's `name` field (with namespace prefix if applicable)
+   - keywords: 3–6 trigger words from the `description`/`trigger` fields
+   - chain: any skill it naturally pairs with (blank if none)
+   - [⚠️opus] suffix if the skill is planning/analysis heavy
+3. Append the new line under ## Skills (or ## MCP Plugins if it's a plugin)
+4. Write the updated file back with the Write tool
+5. Confirm to the user: "skill-map.md updated — <slug> added"
+```
+
+If skill-map.md does not exist yet, build it from scratch (see above) — the new skill will be included automatically.
 
 ---
 
