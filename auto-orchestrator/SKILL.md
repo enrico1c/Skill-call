@@ -33,9 +33,12 @@ Plugins are lower-level — use them when no skill covers the task, or when call
 
 ```
 1. Read the user's full task
-2. Scan the LIVE system-reminder for:
-   a. All available SKILLS (under "The following skills are available")
-   b. All available MCP PLUGIN TOOLS (deferred tools starting with mcp__)
+2. Index available tools — in order:
+   a. Read ~/.claude/skills/skill-map.md (compact index: slug | trigger keywords | →chain-with)
+      Scan keyword column for the best match. [⚠️opus] entries require opus-4-6 model.
+   b. If skill-map.md is absent, fall back to scanning the LIVE system-reminder:
+      - SKILLS listed under "The following skills are available"
+      - MCP PLUGIN TOOLS listed as deferred tools (names starting with mcp__)
 3. Match the task:
    a. Does a skill description/trigger clearly match? → prefer it (richer workflow)
    b. Does an MCP plugin cover it and no skill does? → use the plugin
