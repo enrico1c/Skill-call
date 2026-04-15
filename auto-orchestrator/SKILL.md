@@ -1,124 +1,254 @@
 ---
 name: auto-orchestrator
 description: >
-  Automatically selects and invokes the right skill(s) for any task without the user needing to know which skill to use.
-  Use this skill whenever a user asks you to do something and you recognize that a specialized skill exists for that task —
-  even if they haven't mentioned a skill by name. This includes tasks involving files (PDF, Word, Excel, PowerPoint),
-  browser automation, frontend design, debugging, data pipelines, web apps, SEO, scheduling, security scanning,
-  or any specialized workflow. If the user's request maps to a known skill, invoke this skill to route to the right one.
-  Trigger it proactively — if there's even a moderate chance a skill applies, use it.
+  Automatically selects and invokes the right skill(s) or plugin(s) for any task without the user needing to know which
+  skill or plugin to use. Use this skill whenever a user asks you to do something and you recognize that a specialized
+  skill or MCP plugin exists for that task — even if they haven't mentioned one by name. This includes tasks involving
+  files (PDF, Word, Excel, PowerPoint), browser automation, frontend design, debugging, data pipelines, web apps,
+  SEO, scheduling, security scanning, library documentation, or any specialized workflow.
+  Trigger it proactively — if there's even a moderate chance a skill or plugin applies, use it.
 ---
 
 # Auto-Orchestrator
 
-You are the skill router. Your job is to read the user's task, decide which installed skill(s) best handle it, and invoke them — in sequence if needed — without making the user think about skill names.
-
-## How to Route
-
-### Step 1: Understand the task
-Read the full user request. Identify:
-- **What** they want produced or accomplished (a file? a live webpage? a data pipeline fix?)
-- **What format or domain** it involves (PDF, Excel, browser, Python, Airflow, etc.)
-- **How complex** it is (single skill, or a chain of skills?)
-
-### Step 2: Match to the skill map below
-Pick the best matching skill(s). When multiple apply, think about the logical order — e.g., design first, then test; build first, then audit.
-
-### Step 3: Invoke the skill(s) using the Skill tool
-Call `Skill` with the matched skill name. Pass the user's original task as args. If the task chains multiple skills, run them in order, passing relevant outputs forward.
+You are the task router. Your job is to read the user's task, scan every currently installed **skill** and **MCP plugin**, decide which one(s) best handle it, and invoke them — in sequence if needed — without making the user think about names.
 
 ---
 
-## Skill Map
+## Two kinds of tools you can route to
 
-### Document & File Processing
-| User intent | Skill to invoke |
-|---|---|
-| Read, create, edit, extract text from a **PDF** | `anthropic-skills:pdf` |
-| Create or edit a **Word document** (.docx) | `anthropic-skills:docx` |
-| Work with **Excel / spreadsheets** (.xlsx, .csv with formulas) | `anthropic-skills:xlsx` |
-| Create or edit a **PowerPoint presentation** (.pptx) | `anthropic-skills:pptx` |
+### 1. Skills
+Installed skills appear in the `<system-reminder>` block under "The following skills are available".
+**How to invoke:** `Skill("namespace:skill-name", args: "<user task>")`
+Skills are high-level, guided workflows — prefer them when a skill clearly fits.
 
-### Web & Browser
-| User intent | Skill to invoke |
-|---|---|
-| Automate a browser, fill forms, take screenshots, scrape a site | `anthropic-skills:browser-use` |
-| Navigate websites, click, extract data for AI agents | `anthropic-skills:agent-browser` |
-| Test a local web application (Playwright, UI checks) | `anthropic-skills:webapp-testing` |
-| Audit a website for performance, accessibility, SEO, best practices | `anthropic-skills:web-quality-audit` |
-
-### Design & Frontend
-| User intent | Skill to invoke |
-|---|---|
-| Build or improve a UI, landing page, dashboard, or visual component | `anthropic-skills:frontend-design` |
-| Create SEO-driven pages at scale from templates or data | `anthropic-skills:programmatic-seo` |
-
-### Debugging
-| User intent | Skill to invoke |
-|---|---|
-| Debug a bug, test failure, or unexpected behavior — structured approach | `anthropic-skills:systematic-debugging` |
-| Deep diagnosis, profiling, root cause analysis | `anthropic-skills:debugging-strategies` |
-| Debug an Apache Airflow DAG failure | `anthropic-skills:debugging-dags` |
-
-### Data & AI Pipelines
-| User intent | Skill to invoke |
-|---|---|
-| Work with Apache Airflow DAGs, tasks, or pipelines | `anthropic-skills:debugging-dags` |
-| Build or query data pipelines, answer business questions from a warehouse | *(use data engineering skills if available, otherwise proceed directly)* |
-| Credit risk data cleaning, variable screening | `anthropic-skills:datanalysis-credit-risk` |
-
-### Claude API & Agent SDK
-| User intent | Skill to invoke |
-|---|---|
-| Build an app using the Claude API or Anthropic SDK (`import anthropic`) | `claude-api` |
-
-### Productivity & Meta
-| User intent | Skill to invoke |
-|---|---|
-| Schedule a recurring task or set up automation | `anthropic-skills:schedule` |
-| Upload content to NotebookLM, generate podcasts or summaries | `anthropic-skills:anything-to-notebooklm` |
-| Query a NotebookLM notebook | `anthropic-skills:notebooklm` |
-| Flutter app needing local data persistence / SQLite | `anthropic-skills:flutter-working-with-databases` |
-| Optimize token usage for cost-effective Claude Code use | `anthropic-skills:token-efficiency` |
-| Find and install a skill for a new kind of task | `anthropic-skills:find-skills` |
-| Execute a written implementation plan step by step | `anthropic-skills:executing-plans` |
+### 2. MCP Plugins
+Installed MCP plugins appear in the `<system-reminder>` block as **deferred tools** — listed by name like `mcp__PluginName__tool_name`.
+**How to invoke:** Use `ToolSearch` to fetch the tool schema first, then call the tool directly.
+Plugins are lower-level — use them when no skill covers the task, or when calling a plugin tool is the most direct path.
 
 ---
 
-## Chaining Skills
+## Routing Algorithm (apply every time)
 
-Some tasks need more than one skill in sequence. Common chains:
+```
+1. Read the user's full task
+2. Index available tools — in order:
+   a. Check if ~/.claude/skills/skill-map.md exists (use Read tool)
+   b. If it does NOT exist → BUILD IT NOW (see "Building skill-map.md" below), then read it
+   c. If it exists → read it (compact index: slug | trigger keywords | →chain-with)
+      Scan keyword column for the best match. [⚠️opus] entries require opus-4-6 model.
+3. Match the task:
+   a. Does a skill description/trigger clearly match? → prefer it (richer workflow)
+   b. Does an MCP plugin cover it and no skill does? → use the plugin
+   c. Does the task need BOTH? → chain them (skill first, plugin after, or vice versa)
+4. If multiple skills match → pick the most specific one, or chain if both outputs are needed
+5. If nothing matches → proceed with general capabilities
+6. If a tool should exist but doesn't → tell the user, offer to create it with skill-creator
+7. If the task involves CREATING or UPLOADING/INSTALLING a skill or MCP plugin → after the
+   file lands on disk, append or update its entry in skill-map.md
+   (see "Updating skill-map.md after skill creation or upload" below)
+```
 
-- **"Build me a landing page and audit it"** → `frontend-design` → `web-quality-audit`
-- **"Create an Excel report from this PDF"** → `pdf` (extract) → `xlsx` (build report)
-- **"Create a presentation from this Word doc"** → `docx` (read) → `pptx` (build slides)
-- **"Test my web app and fix bugs"** → `webapp-testing` → `systematic-debugging`
-
-For chains: run the first skill, collect its output, then feed that output into the next skill invocation.
+**Precedence rule:** Skills > Plugins when both could work. Skills have richer, more guided logic. But never ignore a plugin if it's the only thing that fits.
 
 ---
 
-## When No Skill Matches
+## Building skill-map.md (run when file is absent)
 
-If nothing in the skill map clearly fits, proceed with your general capabilities. Don't force an irrelevant skill onto the task — it's better to do it directly than to route poorly.
+When `~/.claude/skills/skill-map.md` does not exist, build it before proceeding:
 
-If the task is genuinely novel and a skill *should* exist but doesn't, mention it to the user and offer to create one with `anthropic-skills:skill-creator`.
+```
+1. Scan the LIVE system-reminder for:
+   a. All SKILLS listed under "The following skills are available"
+      — capture: name, namespace, one-line description, trigger keywords
+   b. All MCP PLUGIN TOOLS listed as deferred tools (names starting with mcp__)
+      — capture: tool name prefix, what it covers
+
+2. For each skill, produce one line:
+   <slug> | <3–6 trigger keywords> | →<chain-slug if obvious, else blank>
+
+   Add [⚠️opus] suffix on the slug if the skill is planning/analysis heavy
+   (e.g. omc-plan, omc-deep-dive, omc-ralplan, architect, analyst, critic).
+
+3. Append a ## MCP Plugins section at the bottom:
+   <mcp__Prefix> | <what it covers> | →<skill it pairs with, if any>
+
+4. Write the result to ~/.claude/skills/skill-map.md using the Write tool.
+```
+
+**skill-map.md format:**
+```markdown
+# Skill Map
+<!-- auto-generated by auto-orchestrator — update when skills change -->
+
+## Skills
+pdf | pdf extract read parse document | →xlsx
+xlsx | excel spreadsheet table data | →pdf
+frontend-design | ui landing page react component | →web-quality-audit
+...
+
+## MCP Plugins
+mcp__Claude_in_Chrome | browser navigate click fill screenshot | →browser-use
+mcp__plugin_context7_context7 | library docs api examples | →claude-api
+...
+```
+
+After writing, continue immediately to step 3 of the routing algorithm.
 
 ---
 
-## Example Routing
+## Updating skill-map.md after skill creation or upload
 
-**User:** "Can you read this contract.pdf and pull out all the dates and parties involved?"
-→ Invoke `anthropic-skills:pdf` with the user's full request.
+Two triggers — both use the same append procedure:
 
-**User:** "I need a nice dashboard to show our Q4 metrics"
-→ Invoke `anthropic-skills:frontend-design`.
+### Trigger A — Skill created in this session
+Keywords: user asks to **create**, **add**, **build**, or **write** a new skill or MCP plugin.
+Run after the skill file is written to disk.
+
+### Trigger B — Skill uploaded / installed from outside
+Keywords: user says **upload**, **install**, **copy**, **import**, **drop in**, **register**,
+or references moving/adding a `.md` file into `~/.claude/skills/` or a skills directory.
+Also triggers when: a skill repo is cloned, a skill pack is installed (e.g. oh-my-claudecode),
+or the user says "I just added a skill" / "new skill is in the system".
+Run as soon as the file is confirmed present on disk.
+
+### Append procedure (both triggers)
+
+```
+1. Read the skill file that was just created or uploaded
+2. Read the current ~/.claude/skills/skill-map.md
+3. Check if an entry for this slug already exists in the map
+   — if yes: update the existing line in place (keywords may have changed)
+   — if no: append a new line
+4. Derive the entry from the skill file's frontmatter:
+   - slug: the skill's `name` field (with namespace prefix if applicable)
+   - keywords: 3–6 trigger words from the `description`/`trigger` fields
+   - chain: any skill it naturally pairs with (blank if none)
+   - [⚠️opus] suffix if the skill is planning/analysis heavy
+5. Write the updated file back with the Write tool
+6. Confirm to the user: "skill-map.md updated — <slug> added/updated"
+```
+
+If skill-map.md does not exist yet, build it from scratch (see above) — the new skill will be included automatically.
+
+---
+
+## How to Invoke Skills
+
+```
+Skill("namespace:skill-name", args: "<user's original task>")
+```
+
+Pass the user's full original request as args. The skill will handle the rest.
+
+---
+
+## How to Invoke MCP Plugins
+
+MCP plugin tools are **deferred** — you must fetch their schema before calling them:
+
+```
+Step 1: ToolSearch("mcp__PluginName keyword")   ← fetch the schema
+Step 2: Call the returned tool directly          ← invoke it
+```
+
+To identify which plugin server covers a task, group tools by their prefix:
+- `mcp__Claude_in_Chrome__*` → Chrome browser automation (navigate, click, fill, screenshot, scrape)
+- `mcp__Claude_Preview__*` → Preview & test local web apps in a browser
+- `mcp__plugin_chrome-devtools-mcp_chrome-devtools__*` → Chrome DevTools (performance, Lighthouse, debugging)
+- `mcp__plugin_aikido_aikido-mcp__*` → Security scanning (SAST, vulnerability detection)
+- `mcp__plugin_context7_context7__*` → Live library documentation & code examples
+- `mcp__mcp-registry__*` → Search and discover new MCP servers
+- `mcp__scheduled-tasks__*` → Create and manage scheduled/recurring tasks
+
+> **This list is illustrative.** Always check the live deferred-tools list in the system-reminder — new plugins you install will appear there automatically.
+
+---
+
+## Skill Routing Reference (illustrative, not exhaustive)
+
+Always scan the live skill list first. These are examples of how descriptions map to skills:
+
+| User intent | Example skill |
+|---|---|
+| Anything with a PDF | `anthropic-skills:pdf` |
+| Word document (.docx) | `anthropic-skills:docx` |
+| Excel / spreadsheet (.xlsx) | `anthropic-skills:xlsx` |
+| PowerPoint (.pptx) | `anthropic-skills:pptx` |
+| Build a UI, landing page, dashboard | `anthropic-skills:frontend-design` |
+| Web app quality / Lighthouse audit | `anthropic-skills:web-quality-audit` |
+| Browser automation (AI agent) | `anthropic-skills:browser-use` or `anthropic-skills:agent-browser` |
+| Test a local web app (Playwright) | `anthropic-skills:webapp-testing` |
+| Debug a bug or test failure | `anthropic-skills:systematic-debugging` |
+| Debug an Airflow DAG | `anthropic-skills:debugging-dags` |
+| Claude API / Anthropic SDK code | `claude-api` |
+| Schedule a recurring task | `anthropic-skills:schedule` |
+| SEO pages at scale | `anthropic-skills:programmatic-seo` |
+| Find/install a new skill | `anthropic-skills:find-skills` |
+| Execute a written implementation plan | `anthropic-skills:executing-plans` |
+| Run a security scan (Aikido) | `aikido:scan` |
+
+---
+
+## Plugin Routing Reference (illustrative, not exhaustive)
+
+Always scan the live deferred-tools list first. These are examples:
+
+| User intent | Plugin prefix to search for |
+|---|---|
+| "Look up docs for [library]", "how do I use [API]" | `mcp__plugin_context7_context7` |
+| "Open Chrome and...", "click on...", "fill this form", "take a screenshot" | `mcp__Claude_in_Chrome` |
+| "Preview my app", "open my local server in a browser" | `mcp__Claude_Preview` |
+| "Run a Lighthouse audit", "profile my page", "debug in DevTools" | `mcp__plugin_chrome-devtools-mcp_chrome-devtools` |
+| "Scan for security issues", "check for vulnerabilities" | `mcp__plugin_aikido_aikido-mcp` |
+| "Find an MCP server for...", "what plugins exist for..." | `mcp__mcp-registry` |
+| "Schedule this to run every...", "create a cron job" | `mcp__scheduled-tasks` |
+
+---
+
+## Chaining Examples
+
+Some tasks need a skill AND a plugin, or multiple skills in sequence:
+
+- **"Build a landing page and audit it"** → `frontend-design` skill → `web-quality-audit` skill
+- **"Extract data from this PDF into Excel"** → `pdf` skill → `xlsx` skill
+- **"Build this UI and preview it in the browser"** → `frontend-design` skill → `mcp__Claude_Preview` plugin
+- **"Look up the Stripe API docs then write the integration code"** → `mcp__plugin_context7_context7` plugin → `claude-api` skill
+- **"Write this feature then scan it for security issues"** → write code directly → `aikido:scan` skill or `mcp__plugin_aikido_aikido-mcp` plugin
+- **"Create a presentation from this Word doc"** → `docx` skill → `pptx` skill
+
+For chains: complete step 1, collect its output, feed it as context into step 2.
+
+---
+
+## Worked Examples
+
+**User:** "Look up how to use the OpenAI streaming API"
+→ Scan live skills → no exact match → scan live plugins → find `mcp__plugin_context7_context7__*`
+→ `ToolSearch("context7 docs")` → call `context7__resolve-library-id` then `context7__query-docs`
+
+**User:** "Go to github.com and find the trending Python repos"
+→ Scan live skills → `agent-browser` or `browser-use` skill may match → invoke it
+→ If neither is installed, scan plugins → find `mcp__Claude_in_Chrome__navigate` → ToolSearch → invoke
+
+**User:** "Run a security scan on the code I just wrote"
+→ Scan live skills → find `aikido:scan` → invoke it via Skill tool
+→ (Plugin `mcp__plugin_aikido_aikido-mcp` also available but skill is preferred)
+
+**User:** "Build a Next.js landing page, preview it, and then audit its Lighthouse score"
+→ Three steps: `frontend-design` skill → `mcp__Claude_Preview` plugin (open preview) → `web-quality-audit` skill (Lighthouse)
 
 **User:** "My Airflow DAG keeps failing on the transform step"
-→ Invoke `anthropic-skills:debugging-dags`.
+→ Scan live skills → `anthropic-skills:debugging-dags` matches exactly → invoke it
 
-**User:** "Build a Next.js landing page and make sure it scores well on Lighthouse"
-→ Invoke `anthropic-skills:frontend-design` first, then `anthropic-skills:web-quality-audit`.
+**User:** "Extract revenue figures from sales.pdf and put them in a spreadsheet"
+→ Two skills chain: `anthropic-skills:pdf` (extract) → `anthropic-skills:xlsx` (build spreadsheet)
 
-**User:** "Write a Python script using the Anthropic SDK to summarize PDFs"
-→ Invoke `claude-api`.
+---
+
+## When Nothing Matches
+
+If no skill or plugin clearly fits, proceed with your general capabilities. Don't force a poor match.
+
+If a tool *should* exist but doesn't, tell the user and offer to create a skill with `anthropic-skills:skill-creator`.
